@@ -26,11 +26,11 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
 
-flags.DEFINE_string('weights', './checkpoints/yolov4-tiny',
+flags.DEFINE_string('weights', './checkpoints/yolov4-416',
                     'path to weights file')
-flags.DEFINE_boolean('tiny', True, 'yolo or yolo-tiny')
-flags.DEFINE_string('video', './data/video/hogwards.mp4', 'path to input video or set to 0 for webcam')
-flags.DEFINE_string('output', "outputs/hog.avi", 'path to output video')
+flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
+flags.DEFINE_string('video', './data/video/usman.mp4', 'path to input video or set to 0 for webcam')
+flags.DEFINE_string('output', "outputs/usman.avi", 'path to output video')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
 flags.DEFINE_integer('size', 416, 'resize images to')
@@ -41,6 +41,8 @@ flags.DEFINE_boolean('dont_show', True, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', True, 'count objects being tracked on screen')
 
+s_time = time.time()
+ 
 
 def main(_argv):
     # Definition of the parameters
@@ -95,6 +97,7 @@ def main(_argv):
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
     frame_num = 0
+    frames_processed = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
     # while video is running
     while True:
         return_value, frame = vid.read()
@@ -105,7 +108,6 @@ def main(_argv):
             print('Video has ended or failed, try a different video format!')
             break
         frame_num += 1
-        print('Frame #: ', frame_num)
         frame_size = frame.shape[:2]
         image_data = cv2.resize(frame, (input_size, input_size))
         image_data = image_data / 255.
@@ -181,7 +183,7 @@ def main(_argv):
         if FLAGS.count:
             cv2.putText(frame, "Objects being tracked: {}".format(count), (75, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                         (0, 255, 0), 2)
-            print("Objects being tracked: {}".format(count))
+            # print("Objects being tracked: {}".format(count))
         # delete detections that are not in allowed_classes
         bboxes = np.delete(bboxes, deleted_indx, axis=0)
         scores = np.delete(scores, deleted_indx, axis=0)
@@ -230,10 +232,24 @@ def main(_argv):
                                                                                                     int(bbox[1]),
                                                                                                     int(bbox[2]),
                                                                                                     int(bbox[3]))))
-
-        # calculate frames per second of running detections
+        # calculate frames per second of running detections with object count
         fps = 1.0 / (time.time() - start_time)
-        print("FPS: %.2f" % fps)
+        frames_processed -= 1
+        s = int(frames_processed / fps)
+        m, s = divmod(s, 60)
+        h, m = divmod(m, 60)
+
+        if FLAGS.count:
+            print("Frame #: {:.2f}, fps: {:.2f}, Objects being tracked: {:.2f} ,est time: {:d}:{:02d}:{:02d}".format(
+                frame_num, fps, count
+                , h, m, s,
+            ))
+        else:
+            print("Frame #: {:.2f}, fps: {:.2f} ,est time: {:d}:{:02d}:{:02d}".format(
+                frame_num, fps
+                , h, m, s,
+            ))
+
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
@@ -252,3 +268,14 @@ if __name__ == '__main__':
         app.run(main)
     except SystemExit:
         pass
+
+
+def timer(start, end):
+    hours, rem = divmod(end - start, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print("Total time taken ")
+    print("{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
+
+
+e_time = time.time()
+timer(s_time, e_time)
