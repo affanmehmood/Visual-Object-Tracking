@@ -29,8 +29,8 @@ from tools import generate_detections as gdet
 flags.DEFINE_string('weights', './checkpoints/yolov4-416',
                     'path to weights file')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
-flags.DEFINE_string('video', './data/video/usman.mp4', 'path to input video or set to 0 for webcam')
-flags.DEFINE_string('output', "outputs/usman.avi", 'path to output video')
+flags.DEFINE_string('video', './data/video/topgear.mp4', 'path to input video or set to 0 for webcam')
+flags.DEFINE_string('output', "outputs/topgear.avi", 'path to output video')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
 flags.DEFINE_integer('size', 416, 'resize images to')
@@ -42,10 +42,13 @@ flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', True, 'count objects being tracked on screen')
 
 s_time = time.time()
- 
+totalCarTracks = []
+totalPeopleTracks = []
+
 
 def main(_argv):
     # Definition of the parameters
+    global input_details, interpreter, output_details, infer
     max_cosine_distance = 0.4
     nn_budget = None
     nms_max_overlap = 1.0
@@ -120,7 +123,7 @@ def main(_argv):
             interpreter.invoke()
             pred = [interpreter.get_tensor(output_details[i]['index']) for i in range(len(output_details))]
             # run detections using yolov3 if flag is set
-            if FLAGS.model == 'yolov3' and FLAGS.tiny == True:
+            if FLAGS.model == 'yolov3' and FLAGS.tiny:
                 boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25,
                                                 input_shape=tf.constant([input_size, input_size]))
             else:
@@ -157,16 +160,16 @@ def main(_argv):
         bboxes = utils.format_boxes(bboxes, original_h, original_w)
 
         # store all predictions in one parameter for simplicity when calling functions
-        pred_bbox = [bboxes, scores, classes, num_objects]
+        # pred_bbox = [bboxes, scores, classes, num_objects]
 
         # read in all class names from config
         class_names = utils.read_class_names(cfg.YOLO.CLASSES)
 
         # by default allow all classes in .names file
-        allowed_classes = list(class_names.values())
+        # allowed_classes = list(class_names.values())
 
         # custom allowed classes (uncomment line below to customize tracker for only people)
-        # allowed_classes = ['person']
+        allowed_classes = ['person', 'car']
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
         names = []
@@ -180,9 +183,23 @@ def main(_argv):
                 names.append(class_name)
         names = np.array(names)
         count = len(names)
+        loc_h = 75
         if FLAGS.count:
             cv2.putText(frame, "Objects being tracked: {}".format(count), (75, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                         (0, 255, 0), 2)
+            for track in tracker.tracks:
+                if track.class_name == 'person' and not(totalPeopleTracks.__contains__(track.track_id)):
+                    totalPeopleTracks.append(track.track_id)
+                if track.class_name == 'car' and not (totalCarTracks.__contains__(track.track_id)):
+                    totalCarTracks.append(track.track_id)
+            if len(totalPeopleTracks) > 0:
+                loc_h += 35
+                cv2.putText(frame, "Total people passed: {}".format(len(totalPeopleTracks)), (75, loc_h),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            if len(totalCarTracks) > 0:
+                loc_h += 35
+                cv2.putText(frame, "Total cars passed: {}".format(len(totalCarTracks)), (75, loc_h),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             # print("Objects being tracked: {}".format(count))
         # delete detections that are not in allowed_classes
         bboxes = np.delete(bboxes, deleted_indx, axis=0)
@@ -208,6 +225,7 @@ def main(_argv):
         tracker.predict()
         tracker.update(detections)
 
+
         # update tracks
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
@@ -228,10 +246,10 @@ def main(_argv):
             if FLAGS.info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id),
                                                                                                     class_name, (
-                                                                                                    int(bbox[0]),
-                                                                                                    int(bbox[1]),
-                                                                                                    int(bbox[2]),
-                                                                                                    int(bbox[3]))))
+                                                                                                        int(bbox[0]),
+                                                                                                        int(bbox[1]),
+                                                                                                        int(bbox[2]),
+                                                                                                        int(bbox[3]))))
         # calculate frames per second of running detections with object count
         fps = 1.0 / (time.time() - start_time)
         frames_processed -= 1
@@ -240,17 +258,17 @@ def main(_argv):
         h, m = divmod(m, 60)
 
         if FLAGS.count:
-            print("Frame #: {:.2f}, fps: {:.2f}, Objects being tracked: {:.2f} ,est time: {:d}:{:02d}:{:02d}".format(
+            print("Frame #: {:.2f}, fps: {:.2f}, Objects being tracked: {:.2f}, est time: {:d}:{:02d}:{:02d}".format(
                 frame_num, fps, count
                 , h, m, s,
             ))
         else:
-            print("Frame #: {:.2f}, fps: {:.2f} ,est time: {:d}:{:02d}:{:02d}".format(
+            print("Frame #: {:.2f}, fps: {:.2f}, est time: {:d}:{:02d}:{:02d}".format(
                 frame_num, fps
                 , h, m, s,
             ))
 
-        result = np.asarray(frame)
+        # result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
         if not FLAGS.dont_show:
